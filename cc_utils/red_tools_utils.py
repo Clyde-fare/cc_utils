@@ -1,8 +1,8 @@
 __author__ = 'clyde'
 
-import gaussian_job_manager
-from gaussian_job_manager import Job
-from pbs_util import pbs
+from gausspy import gaussian_job_manager
+from gausspy.gaussian_job_manager import Job
+from ASE_extensions import remote
 import os
 
 def set_red(**kwargs):
@@ -109,7 +109,7 @@ def red_on_server(p2n_f_nm, **kwargs):
 
     qsub_command = job.exec_command(red_job_fn)
 
-    ssh = pbs.connect_server(ssh=True)
+    ssh = remote.connect_server(ssh=True)
     stdin, stdout, stderr = ssh.exec_command(qsub_command)
     qid = stdout.read().split('.')[0]
     ssh.close()
@@ -141,7 +141,7 @@ def get_red_data_from_server(id):
 
     status=True
     try:
-        status = pbs.qstat(id)
+        status = remote.qstat(id)
     except PBSUtilQStatError:
         os.system('rsync -av {l} {s}'.format(l=os.getcwd(), s=os.environ['GAUSS_HOST'] + active_dir))
 
