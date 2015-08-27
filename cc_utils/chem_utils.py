@@ -128,7 +128,7 @@ def get_bad(mol, gaff_atoms, amber_atoms, non_std_atom_indexes):
     the non standard residue specified and and the rest of the protein.
     Returns mixed amber-gaff, gaff-gaff and amber-amber combinations"""
 
-    from cc_notebook_utils import unwind
+    from cc_notebook import unwind
     std_nn_ind = unwind([[n for n in mol.graph.neighbors[i] if n not in non_std_atom_indexes] for i in non_std_atom_indexes])
     nstd_nn_ind = [[n for n in mol.graph.neighbors[i] if n in non_std_atom_indexes] for i in std_nn_ind]
     std_nnn_ind = [[n for n in mol.graph.neighbors[i] if n not in non_std_atom_indexes] for i in std_nn_ind]
