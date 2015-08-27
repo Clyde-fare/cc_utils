@@ -2,7 +2,7 @@ __author__ = 'clyde'
 
 from gausspy import gaussian_job_manager
 from gausspy.gaussian_job_manager import Job
-from ASE_extensions import remote
+from ase_extensions import remote
 import os
 
 def set_red(**kwargs):
@@ -131,7 +131,7 @@ def run_red(p2n_f_nm, **kwargs):
     os.system('./{red} &'.format(red=red_fn))
 
 
-from pbs_util.pbs import PBSUtilQStatError
+from ase_extensions.remote import PBSUtilQStatError
 def get_red_data_from_server(id):
     local_home = os.environ['ASE_HOME']
     try:
