@@ -176,7 +176,7 @@ def get_bad(mol, gaff_atoms, amber_atoms, non_std_atom_indexes):
 
 def get_ht_ind(mol, non_std_atom_indexes):
     """returns the head and the tail index of the nonstandard residue specified"""
-    from cc_notebook_utils import unwind
+    from cc_notebook import unwind
     std_nn_ind = unwind([[n for n in mol.graph.neighbors[i] if n not in non_std_atom_indexes] for i in non_std_atom_indexes])
     nstd_nn_ind = [[n for n in mol.graph.neighbors[i] if n in non_std_atom_indexes] for i in std_nn_ind]
     return unwind(nstd_nn_ind) - non_std_atom_indexes[0]
@@ -498,7 +498,7 @@ def write_gauss_amber_params(params, para_file=None):
         return gauss_amb
 
 
-#todo worry about reversed order parameters that are infact equivalent e.g. t1,t2,t3,t4 == t4,t3,t2,t1
+
 def update_amber_params(orig_params, mod_params, overwrite=True):
     """updates a dictionary of amber parameters with the values present in a second dictionary of amber parameters.
      This is useful for modifications of a parameter set, e.g. for ff99 -> ff99SB we load parm99 then update it with frcmod.ff99SB"""
@@ -509,9 +509,12 @@ def update_amber_params(orig_params, mod_params, overwrite=True):
         for mod_p in mod_params[k]:
             # for each mod param find equivalent orig param and if we are overwriting update it,
             # if no equivalent orig param found just add mod param to the new param stack
+            # Added OR statement to check for duplicates (t1 t2 t3 t4 == t4 t3 t2 t1) 
             try:
                 replace_p = next(org_p for org_p in final_params[k] if (abs(int(float(org_p.get('Nt','0')))), org_p.get('element'), org_p.get('t1'), org_p.get('t2'), org_p.get('t3'), org_p.get('t4'))
-                                                                    == (abs(int(float(mod_p.get('Nt','0')))), mod_p.get('element'), mod_p.get('t1'), mod_p.get('t2'), mod_p.get('t3'), mod_p.get('t4')))
+                                                                    == (abs(int(float(mod_p.get('Nt','0')))), mod_p.get('element'), mod_p.get('t1'), mod_p.get('t2'), mod_p.get('t3'), mod_p.get('t4'))
+                                                                    or (abs(int(float(org_p.get('Nt','0')))), org_p.get('element'), org_p.get('t1'), org_p.get('t2'), org_p.get('t3'), org_p.get('t4'))
+                                                                    == (abs(int(float(mod_p.get('Nt','0')))), mod_p.get('element'), mod_p.get('t4'), mod_p.get('t3'), mod_p.get('t2'), mod_p.get('t1')))
                 if overwrite:
                     replace_p.update(mod_p)
             except StopIteration:
