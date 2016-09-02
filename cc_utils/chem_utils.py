@@ -81,7 +81,7 @@ def atom_type_map(data, amber_mol_f, gaff_mol_f):
 
     return atom_dict
 
-def set_frag_atom_types(fragment_mol2, new_fragment_mol2, full_pdb, atom_types='amber'):
+def set_frag_atom_types(fragment_mol2, new_fragment_mol2, full_pdb, atom_types='amber',fragment_indices = None):
     import os
     import Biskit as B
     fragment_orig_atoms, bonds = mol2_parse(fragment_mol2, flag='original')
@@ -89,14 +89,14 @@ def set_frag_atom_types(fragment_mol2, new_fragment_mol2, full_pdb, atom_types='
     m = B.PDBModel(full_pdb)
     orig_atoms = [a['name'] for a in m]
 
-    fragment_indices = None
-    for i,n in enumerate(orig_atoms):
-        try:
-            if orig_atoms[i:i+len(fragment_orig_atoms)] == fragment_orig_atoms:
-                fragment_indices = range(i, i+len(fragment_orig_atoms))
-                continue
-        except IndexError:
-            pass
+    if not fragment_indices:
+        for i,n in enumerate(orig_atoms):
+            try:
+                if orig_atoms[i:i+len(fragment_orig_atoms)] == fragment_orig_atoms:
+                    fragment_indices = range(i, i+len(fragment_orig_atoms))
+                    continue
+            except IndexError:
+                pass
 
     if not fragment_indices:
         raise RuntimeError('Failed to find fragment')
@@ -111,7 +111,7 @@ def set_frag_atom_types(fragment_mol2, new_fragment_mol2, full_pdb, atom_types='
         fragment_atoms = [gaff_atoms[i] for i in fragment_indices]
     else:
         raise RuntimeError('Invalid atom_type selected')
-
+        
     mol2_replace(fragment_mol2, new_fragment_mol2, fragment_atoms)
 
 def set_nonstd_name(fragment_mol2, res_name):
@@ -173,6 +173,13 @@ def get_bad(mol, gaff_atoms, amber_atoms, non_std_atom_indexes):
             aangles.append(adihedrals[i][1:])
 
     return {'mixed':[bonds, angles, dihedrals], 'gaff': [gbonds, gangles, gdihedrals] , 'amber': [abonds, aangles, adihedrals]}
+
+def print_bond_distances(atoms):
+    neighbours=atoms.get_neighbours()
+    for i,a in enumerate(atoms):
+        for j in neighbours[i]:
+            distance=atoms.get_distance(i,j)
+            print("%s%s\t%s%s\t%0.5s" % (atoms[i].symbol,i+1,atoms[j].symbol,j+1,distance))
 
 def get_ht_ind(mol, non_std_atom_indexes):
     """returns the head and the tail index of the nonstandard residue specified"""
@@ -282,21 +289,24 @@ def get_amber_params_from_frcmod(vers='ff99SB'):
             param_str = param_str.split('  ')[0].replace(' -', '-').replace('- ', '-') + '  ' + '  '.join(param_str.split('  ')[1:])
             t1,t2 = length_k.split('-')
             keq,req = param_str.split()[1:3]
-            final_dict['bondLengths'].append({'t1': t1, 't2': t2, 'keq': keq, 'req': req})
+            penalty = param_str.split('=')[1].strip() if '=' in param_str else None
+            final_dict['bondLengths'].append({'t1': t1, 't2': t2, 'keq': keq, 'req': req, 'penalty': penalty})
 
     for angle_k in d.get('ANGL',[]):
         for param_str in d['ANGL'][angle_k]:
             param_str = param_str.split('  ')[0].replace(' -', '-').replace('- ', '-') + '  ' + '  '.join(param_str.split('  ')[1:])
             t1,t2,t3 = angle_k.split('-')
             keq, req = param_str.split()[1:3]
-            final_dict['bondAngles'].append({'t1': t1, 't2': t2, 't3': t3, 'keq': keq, 'req': req})
+            penalty = param_str.split('=')[1].strip() if '=' in param_str else None
+            final_dict['bondAngles'].append({'t1': t1, 't2': t2, 't3': t3, 'keq': keq, 'req': req, 'penalty': penalty})
 
     for dihedral_k in d.get('DIHE',[]):
         for param_str in d['DIHE'][dihedral_k]:
             param_str = param_str.split('  ')[0].replace(' -', '-').replace('- ', '-') + '  ' + '  '.join(param_str.split('  ')[1:])
             t1,t2,t3,t4 = dihedral_k.split('-')
             npth, Vn, gamma, Nt = param_str.split()[1:5]
-            final_dict['bondTorsions'].append({'t1': t1, 't2': t2, 't3': t3, 't4': t4, 'npth': npth, 'Vn': Vn, 'gamma': gamma, 'Nt': Nt})
+            penalty = param_str.split('=')[1].strip() if '=' in param_str else None
+            final_dict['bondTorsions'].append({'t1': t1, 't2': t2, 't3': t3, 't4': t4, 'npth': npth, 'Vn': Vn, 'gamma': gamma, 'Nt': Nt, 'penalty': penalty})
 
     for improper_k in d.get('IMPR',[]):
         for param_str in d['IMPR'][improper_k]:
@@ -489,7 +499,7 @@ def write_gauss_amber_params(params, para_file=None):
     for vdw in params.get('types', []):
         vdws.append('VDW {a:<2} {r:<6} {d}'.format(a=vdw['name'], r=vdw['vdwRadius'], d=vdw['potentialWellDepth']))
 
-    gauss_amb = '\n\n'.join(['\n'.join(nbnds), '\n'.join(stretches), '\n'.join(angles), '\n'.join(torsions), '\n'.join(impropers), '\n'.join(vdws)])
+    gauss_amb = '\n'.join(['\n'.join(nbnds), '\n'.join(stretches), '\n'.join(angles), '\n'.join(torsions), '\n'.join(impropers), '\n'.join(vdws)])
 
     if para_file:
         with open(para_file, 'w') as f:
@@ -504,17 +514,38 @@ def update_amber_params(orig_params, mod_params, overwrite=True):
      This is useful for modifications of a parameter set, e.g. for ff99 -> ff99SB we load parm99 then update it with frcmod.ff99SB"""
     import copy
     final_params = copy.deepcopy(orig_params)
+    mod_params = copy.deepcopy(mod_params)
 
     for k in mod_params.keys():
         for mod_p in mod_params[k]:
             # for each mod param find equivalent orig param and if we are overwriting update it,
             # if no equivalent orig param found just add mod param to the new param stack
-            # Added OR statement to check for duplicates (t1 t2 t3 t4 == t4 t3 t2 t1) 
+            # Added OR statements to check for duplicates
             try:
-                replace_p = next(org_p for org_p in final_params[k] if (abs(int(float(org_p.get('Nt','0')))), org_p.get('element'), org_p.get('t1'), org_p.get('t2'), org_p.get('t3'), org_p.get('t4'))
-                                                                    == (abs(int(float(mod_p.get('Nt','0')))), mod_p.get('element'), mod_p.get('t1'), mod_p.get('t2'), mod_p.get('t3'), mod_p.get('t4'))
-                                                                    or (abs(int(float(org_p.get('Nt','0')))), org_p.get('element'), org_p.get('t1'), org_p.get('t2'), org_p.get('t3'), org_p.get('t4'))
-                                                                    == (abs(int(float(mod_p.get('Nt','0')))), mod_p.get('element'), mod_p.get('t4'), mod_p.get('t3'), mod_p.get('t2'), mod_p.get('t1')))
+                replace_p = next(org_p for org_p in final_params[k] if (all([abs(int(float(org_p.get('Nt','0'))))==abs(int(float(mod_p.get('Nt','0')))),
+                                                                            org_p.get('element')==mod_p.get('element'), 
+                                                                            org_p.get('t1')==mod_p.get('t1'),
+                                                                            org_p.get('t2')==mod_p.get('t2'), 
+                                                                            org_p.get('t3')==mod_p.get('t3'), 
+                                                                            org_p.get('t4')==mod_p.get('t4')]))
+                                                                    or (all([abs(int(float(org_p.get('Nt','0'))))==abs(int(float(mod_p.get('Nt','0')))),
+                                                                            org_p.get('element')==mod_p.get('element'), 
+                                                                            org_p.get('t1')==mod_p.get('t4'),
+                                                                            org_p.get('t2')==mod_p.get('t3'), 
+                                                                            org_p.get('t3')==mod_p.get('t2'), 
+                                                                            org_p.get('t4')==mod_p.get('t1')]))
+                                                                    or (all([abs(int(float(org_p.get('Nt','0'))))==abs(int(float(mod_p.get('Nt','0')))),
+                                                                            org_p.get('element')==mod_p.get('element'), 
+                                                                            org_p.get('t1')==mod_p.get('t3'),
+                                                                            org_p.get('t2')==mod_p.get('t2'), 
+                                                                            org_p.get('t3')==mod_p.get('t1'), 
+                                                                            org_p.get('t4')==mod_p.get('t4')==None]))
+                                                                    or (all([abs(int(float(org_p.get('Nt','0'))))==abs(int(float(mod_p.get('Nt','0')))),
+                                                                            org_p.get('element')==mod_p.get('element'), 
+                                                                            org_p.get('t1')==mod_p.get('t2'),
+                                                                            org_p.get('t2')==mod_p.get('t1'), 
+                                                                            org_p.get('t3')==mod_p.get('t3')==None, 
+                                                                            org_p.get('t4')==mod_p.get('t4')==None])))                
                 if overwrite:
                     replace_p.update(mod_p)
             except StopIteration:

@@ -116,7 +116,7 @@ def red_on_server(p2n_f_nm, **kwargs):
     return qid
 
 
-def run_red(p2n_f_nm, **kwargs):
+def run_red(p2n_f_nm, blocking=True, **kwargs):
     nodes = kwargs.get('nodes', 8)
     xred = kwargs.get('xred', False)
     opt = kwargs.get('opt', True)
@@ -128,7 +128,11 @@ def run_red(p2n_f_nm, **kwargs):
 
     red_fn = set_red(xred=xred, nodes=nodes, opt=opt, mep=mep, refit=refit, qm=qm, calc_type=calc_type, cor=cor)
     os.system('cp {p2n} Mol_red1.p2n'.format(p2n=p2n_f_nm))
-    os.system('./{red} &'.format(red=red_fn))
+    
+    if blocking:
+        os.system('./{red} > RED.log'.format(red=red_fn))
+    else:
+        os.system('./{red} > RED.log &'.format(red=red_fn))
 
 
 from ase_extensions.remote import PBSUtilQStatError
